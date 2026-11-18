@@ -3,6 +3,8 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { MaximizeIcon, MinusIcon, PlusIcon, ScanIcon } from "lucide-react";
 import { ExpandedImageDialog } from "~/components/chat/ExpandedImageDialog";
 import { observeResize } from "~/lib/observeResize";
+import { AnnotateAction } from "../annotate/AnnotateAction";
+import { loadImageForAnnotation } from "../annotate/annotationSources";
 import { AttachmentImage } from "../media/AttachmentImage";
 import { FileSurfaceAction, FileSurfaceFailure } from "./fileSurfaceChrome";
 
@@ -75,6 +77,12 @@ export default function PreviewImageContent(props: {
           >
             <MaximizeIcon className="size-3.5" />
           </FileSurfaceAction>
+          <AnnotateAction
+            label="Annotate image"
+            name={props.name}
+            disabled={!natural.width}
+            load={() => loadImageForAnnotation(props.src)}
+          />
         </div>
       </div>
       <div ref={ref} className="min-h-0 flex-1 overflow-auto">

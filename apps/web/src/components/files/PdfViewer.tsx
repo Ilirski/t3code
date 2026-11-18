@@ -13,6 +13,8 @@ import { msg, useGT } from "gt-react";
 import { m } from "~/i18n/messages";
 import { ChevronDownIcon, ChevronUpIcon, MinusIcon, PlusIcon, ScanIcon } from "lucide-react";
 import { Input } from "~/components/ui/input";
+import { AnnotateAction } from "../annotate/AnnotateAction";
+import { renderPdfPageForAnnotation } from "../annotate/annotationSources";
 import { observeResize } from "~/lib/observeResize";
 import { FileSurfaceAction, FileSurfaceFailure, FileSurfaceLoading } from "./fileSurfaceChrome";
 import { readBoundedDocument } from "./readBoundedDocument";
@@ -431,6 +433,16 @@ export default function PdfViewer(props: {
         >
           <ScanIcon className="size-3.5" />
         </FileSurfaceAction>
+        <AnnotateAction
+          label="Annotate page"
+          name={`${props.title.replace(/\.pdf$/i, "")} page ${current + 1}`}
+          disabled={!pdf}
+          load={() =>
+            pdf
+              ? renderPdfPageForAnnotation(pdf, current)
+              : Promise.reject(new Error("The PDF is still loading."))
+          }
+        />
         <div className="w-28">
           <Input
             ref={find}
