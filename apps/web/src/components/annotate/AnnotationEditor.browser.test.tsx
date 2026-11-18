@@ -81,8 +81,9 @@ it("draws a box, undoes and redoes it, and hands a PNG to the composer", async (
 });
 
 it("places text where the user clicks and commits it once", async () => {
+  const onClose = vi.fn();
   await using _screen = await render(
-    <AnnotationEditor name="notes" load={async () => whiteCanvas()} onClose={() => {}} />,
+    <AnnotationEditor name="notes" load={async () => whiteCanvas()} onClose={onClose} />,
     { router: false },
   );
   const canvasLocator = page.getByRole("img", { name: "Annotation canvas for notes" });
@@ -95,14 +96,35 @@ it("places text where the user clicks and commits it once", async () => {
     .element(page.getByRole("button", { name: "Text" }))
     .toHaveAttribute("aria-pressed", "true");
   const rect = canvas.getBoundingClientRect();
-  await canvasLocator.click({ position: { x: rect.width * 0.25, y: rect.height * 0.4 } });
   const field = page.getByRole("textbox", { name: "Annotation text" });
+  // Escape in the field discards the draft without closing the editor.
+  await canvasLocator.click({ position: { x: rect.width * 0.25, y: rect.height * 0.4 } });
+  await field.fill("Discarded");
+  await userEvent.keyboard("{Escape}");
+  await expect.element(field).not.toBeInTheDocument();
+  await expect.element(canvasLocator).toBeVisible();
+  expect(onClose).not.toHaveBeenCalled();
+  expect(canvas.toDataURL()).toBe(before);
+
+  await canvasLocator.click({ position: { x: rect.width * 0.25, y: rect.height * 0.4 } });
   await field.fill("Fix this");
   await userEvent.keyboard("{Enter}");
   await expect.element(field).not.toBeInTheDocument();
   await vi.waitFor(() => expect(canvas.toDataURL()).not.toBe(before));
 
   // One undo removes the text entirely; a double commit would leave a copy behind.
+  await page.getByRole("button", { name: "Undo" }).click();
+  await vi.waitFor(() => expect(canvas.toDataURL()).toBe(before));
+  await expect.element(page.getByRole("button", { name: "Undo" })).toBeDisabled();
+
+  // Clicking elsewhere commits the open text once and starts a fresh field there.
+  await canvasLocator.click({ position: { x: rect.width * 0.25, y: rect.height * 0.4 } });
+  await field.fill("Again");
+  await canvasLocator.click({ position: { x: rect.width * 0.6, y: rect.height * 0.7 } });
+  await expect.element(field).toHaveValue("");
+  await userEvent.keyboard("{Escape}");
+  await expect.element(field).not.toBeInTheDocument();
+  await vi.waitFor(() => expect(canvas.toDataURL()).not.toBe(before));
   await page.getByRole("button", { name: "Undo" }).click();
   await vi.waitFor(() => expect(canvas.toDataURL()).toBe(before));
   await expect.element(page.getByRole("button", { name: "Undo" })).toBeDisabled();

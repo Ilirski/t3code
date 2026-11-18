@@ -122,6 +122,8 @@ export default function AnnotationEditor(props: {
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const draftRef = useRef<Annotation | null>(null);
+  // Only the pointer that started a shape may extend or finish it; a second finger is ignored.
+  const pointerRef = useRef<number | null>(null);
   const frameRef = useRef<number | null>(null);
   // Blur and the next click can both try to commit the same text; the ref lets only one win.
   const textRef = useRef<TextDraft | null>(null);
@@ -231,7 +233,7 @@ export default function AnnotationEditor(props: {
   };
 
   const onPointerDown = (event: ReactPointerEvent<HTMLCanvasElement>) => {
-    if (!sizes || event.button !== 0) return;
+    if (!sizes || event.button !== 0 || pointerRef.current !== null) return;
     const point = imagePoint(event);
     commitText();
     if (tool === "text") {
@@ -246,6 +248,7 @@ export default function AnnotationEditor(props: {
       return;
     }
     event.currentTarget.setPointerCapture(event.pointerId);
+    pointerRef.current = event.pointerId;
     draftRef.current =
       tool === "pen" || tool === "highlighter"
         ? {
@@ -261,7 +264,7 @@ export default function AnnotationEditor(props: {
 
   const onPointerMove = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     const draft = draftRef.current;
-    if (!draft || !sizes) return;
+    if (!draft || !sizes || event.pointerId !== pointerRef.current) return;
     const point = imagePoint(event);
     if (draft.kind === "stroke") {
       const last = draft.points[draft.points.length - 1];
@@ -273,8 +276,10 @@ export default function AnnotationEditor(props: {
     scheduleRedraw();
   };
 
-  const onPointerUp = () => {
+  const onPointerUp = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    if (event.pointerId !== pointerRef.current) return;
     const draft = draftRef.current;
+    pointerRef.current = null;
     draftRef.current = null;
     if (draft) commit(draft);
     scheduleRedraw();
@@ -498,6 +503,7 @@ export default function AnnotationEditor(props: {
                   onPointerMove={onPointerMove}
                   onPointerUp={onPointerUp}
                   onPointerCancel={onPointerUp}
+                  onLostPointerCapture={onPointerUp}
                 />
                 {textDraft && sizes ? (
                   <input
