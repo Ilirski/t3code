@@ -68,6 +68,15 @@ jobs:
           DESKTOP_VERSION: ${{ inputs.version }}
         run: vp run dist:desktop:win --build-version "$env:DESKTOP_VERSION"
 
+      - name: List packaged files
+        if: failure()
+        shell: pwsh
+        run: |
+          Get-ChildItem release -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+            "== $($_.FullName)"
+            Get-ChildItem $_.FullName -Recurse -File | ForEach-Object { $_.FullName.Substring($PWD.Path.Length + 1) }
+          }
+
       - name: Upload installer
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
