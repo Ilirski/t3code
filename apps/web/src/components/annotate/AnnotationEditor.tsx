@@ -121,7 +121,6 @@ export default function AnnotationEditor(props: {
   const [textDraft, setTextDraft] = useState<TextDraft | null>(null);
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const stageRef = useRef<HTMLDivElement>(null);
   const draftRef = useRef<Annotation | null>(null);
   const frameRef = useRef<number | null>(null);
   // Blur and the next click can both try to commit the same text; the ref lets only one win.
@@ -151,10 +150,8 @@ export default function AnnotationEditor(props: {
     };
   }, [loading]);
 
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Measures the stage so the canvas can fit the space it is given.
-  useLayoutEffect(() => {
-    const node = stageRef.current;
-    if (!node) return;
+  // The dialog portal mounts its children after the first commit, so a mount effect would see no stage.
+  const measureStage = (node: HTMLDivElement) => {
     const update = () =>
       setViewport({
         width: Math.max(1, node.clientWidth - 32),
@@ -162,7 +159,7 @@ export default function AnnotationEditor(props: {
       });
     update();
     return observeResize(node, update);
-  }, []);
+  };
 
   const redraw = () => {
     const canvas = canvasRef.current;
@@ -181,6 +178,11 @@ export default function AnnotationEditor(props: {
     if (canvas.width !== image.width || canvas.height !== image.height) {
       canvas.width = image.width;
       canvas.height = image.height;
+    }
+    // A queued frame holds the previous render's annotations and would erase a fresh commit.
+    if (frameRef.current !== null) {
+      cancelAnimationFrame(frameRef.current);
+      frameRef.current = null;
     }
     redraw();
   });
@@ -470,7 +472,7 @@ export default function AnnotationEditor(props: {
             </div>
           </div>
           <div
-            ref={stageRef}
+            ref={measureStage}
             className="flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-muted/40"
           >
             {error ? (
