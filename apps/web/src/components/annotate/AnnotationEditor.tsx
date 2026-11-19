@@ -1,4 +1,5 @@
 import {
+  CheckIcon,
   CopyIcon,
   DownloadIcon,
   HighlighterIcon,
@@ -121,6 +122,8 @@ export default function AnnotationEditor(props: {
   const [history, setHistory] = useState(EMPTY_ANNOTATION_HISTORY);
   const [textDraft, setTextDraft] = useState<TextDraft | null>(null);
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
+  const [copied, setCopied] = useState(false);
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const draftRef = useRef<Annotation | null>(null);
   // Only the pointer that started a shape may extend or finish it; a second finger is ignored.
@@ -323,7 +326,11 @@ export default function AnnotationEditor(props: {
     if (!canvas) return;
     // The clipboard write must start inside the click; the PNG encodes afterwards.
     navigator.clipboard.write([new ClipboardItem({ "image/png": canvasToPng(canvas) })]).then(
-      () => toastManager.add({ type: "success", title: "Annotated image copied" }),
+      () => {
+        if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+        setCopied(true);
+        copiedTimerRef.current = setTimeout(() => setCopied(false), 2000);
+      },
       (cause: unknown) => reportFailure("Could not copy the image", cause),
     );
   };
@@ -460,8 +467,12 @@ export default function AnnotationEditor(props: {
               </IconAction>
             </div>
             <div className="ml-auto flex items-center gap-1">
-              <IconAction label="Copy image" disabled={!ready} onPress={copy}>
-                <CopyIcon className="size-4" />
+              <IconAction label={copied ? "Copied" : "Copy image"} disabled={!ready} onPress={copy}>
+                {copied ? (
+                  <CheckIcon className="size-4 text-primary" />
+                ) : (
+                  <CopyIcon className="size-4" />
+                )}
               </IconAction>
               <IconAction label="Save image" disabled={!ready} onPress={save}>
                 <DownloadIcon className="size-4" />
