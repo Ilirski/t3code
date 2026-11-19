@@ -524,12 +524,12 @@ export default function AnnotationEditor(props: {
                       }
                     }}
                     className="absolute min-w-24 border border-dashed border-ring bg-transparent p-0 outline-none"
+                    // Offsets cancel the 1px border so the text box starts at the click, as drawn on commit.
                     style={{
-                      left: textDraft.left,
-                      top: textDraft.top,
+                      left: textDraft.left - 1,
+                      top: textDraft.top - 1,
                       color,
                       font: annotationFont(sizes.text * displayScale),
-                      lineHeight: 1,
                     }}
                   />
                 ) : null}

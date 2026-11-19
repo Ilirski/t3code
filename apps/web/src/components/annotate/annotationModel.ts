@@ -195,12 +195,13 @@ export function drawAnnotation(context: CanvasRenderingContext2D, annotation: An
     }
     case "text": {
       context.font = annotationFont(annotation.size);
-      context.textBaseline = "top";
+      // `at` is the top of a CSS `line-height: normal` line box, where the typing input put the text.
+      const ascent = context.measureText(annotation.text).fontBoundingBoxAscent;
       // A halo in the contrasting colour keeps text legible on any background.
       context.strokeStyle = contrastColor(annotation.color);
       context.lineWidth = Math.max(2, annotation.size / 6);
       annotation.text.split("\n").forEach((line, index) => {
-        const y = annotation.at.y + index * annotation.size * 1.2;
+        const y = annotation.at.y + ascent + index * annotation.size * 1.2;
         context.strokeText(line, annotation.at.x, y);
         context.fillStyle = annotation.color;
         context.fillText(line, annotation.at.x, y);
