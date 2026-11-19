@@ -86,8 +86,9 @@ function IconAction(props: {
             variant="ghost"
             size="icon-sm"
             aria-label={props.label}
-            disabled={props.disabled ?? false}
-            onClick={props.onPress}
+            // Native `disabled` drops focus out of the dialog when a press disables its own button.
+            aria-disabled={props.disabled || undefined}
+            onClick={props.disabled ? undefined : props.onPress}
           >
             {props.children}
           </Button>

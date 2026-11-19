@@ -68,6 +68,11 @@ it("draws a box, undoes and redoes it, and hands a PNG to the composer", async (
 
   await undo.click();
   await vi.waitFor(() => expect(pixel(canvas, 40, 70)).toEqual([255, 255, 255, 255]));
+  // Undo just disabled itself while focused; shortcuts must still reach the editor.
+  await userEvent.keyboard("{Control>}y{/Control}");
+  await vi.waitFor(() => expect(pixel(canvas, 40, 70)[1]).toBeLessThan(200));
+  await userEvent.keyboard("{Control>}z{/Control}");
+  await vi.waitFor(() => expect(pixel(canvas, 40, 70)).toEqual([255, 255, 255, 255]));
   await page.getByRole("button", { name: "Redo" }).click();
   await vi.waitFor(() => expect(pixel(canvas, 40, 70)[1]).toBeLessThan(200));
 
