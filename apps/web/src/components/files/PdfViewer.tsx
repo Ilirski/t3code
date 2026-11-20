@@ -434,7 +434,7 @@ export default function PdfViewer(props: {
           <ScanIcon className="size-3.5" />
         </FileSurfaceAction>
         <AnnotateAction
-          label="Annotate page"
+          label={gt("Annotate page")}
           name={`${props.title.replace(/\.pdf$/i, "")} page ${current + 1}`}
           disabled={!pdf}
           load={() =>

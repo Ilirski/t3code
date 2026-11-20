@@ -1,4 +1,7 @@
+import { msg } from "gt-react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
+
+import { m } from "~/i18n/messages";
 
 import { readMediaBlob } from "../media/mediaContent";
 import { annotationWorkingSize } from "./annotationModel";
@@ -10,14 +13,14 @@ function blankCanvas(width: number, height: number) {
   canvas.width = width;
   canvas.height = height;
   const context = canvas.getContext("2d");
-  if (!context) throw new Error("Canvas drawing is unavailable.");
+  if (!context) throw new Error(m(msg("Canvas drawing is unavailable.")));
   return { canvas, context };
 }
 
 /** Reads through fetch, not the <img>, so a cross-origin asset cannot taint the export canvas. */
 export async function loadImageForAnnotation(src: string): Promise<AnnotationImage> {
   const bitmap = await createImageBitmap(await readMediaBlob(src)).catch((cause: unknown) => {
-    throw new Error("This image could not be decoded for annotation.", { cause });
+    throw new Error(m(msg("This image could not be decoded for annotation.")), { cause });
   });
   try {
     const size = annotationWorkingSize(bitmap.width, bitmap.height);

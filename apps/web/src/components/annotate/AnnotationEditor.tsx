@@ -13,6 +13,7 @@ import {
   Undo2Icon,
   XIcon,
 } from "lucide-react";
+import { msg, T, useGT, useMessages } from "gt-react";
 import {
   useEffect,
   useLayoutEffect,
@@ -25,6 +26,7 @@ import {
 
 import { useComposerHandleContext } from "~/composerHandleContext";
 import { requestConfirmDialog } from "~/confirmDialog";
+import { m } from "~/i18n/messages";
 import { observeResize } from "~/lib/observeResize";
 import { cn } from "~/lib/utils";
 import { Button } from "../ui/button";
@@ -58,11 +60,26 @@ const TOOLS: ReadonlyArray<{
   readonly key: string;
   readonly Icon: typeof PencilIcon;
 }> = [
-  { tool: "pen", label: "Pen", key: "p", Icon: PencilIcon },
-  { tool: "highlighter", label: "Highlighter", key: "h", Icon: HighlighterIcon },
-  { tool: "arrow", label: "Arrow", key: "a", Icon: MoveUpRightIcon },
-  { tool: "rect", label: "Box", key: "b", Icon: SquareIcon },
-  { tool: "text", label: "Text", key: "t", Icon: TypeIcon },
+  { tool: "pen", label: msg("Pen"), key: "p", Icon: PencilIcon },
+  { tool: "highlighter", label: msg("Highlighter"), key: "h", Icon: HighlighterIcon },
+  {
+    tool: "arrow",
+    label: msg("Arrow", { $context: "drawing tool" }),
+    key: "a",
+    Icon: MoveUpRightIcon,
+  },
+  {
+    tool: "rect",
+    label: msg("Box", { $context: "drawing tool that draws a rectangle" }),
+    key: "b",
+    Icon: SquareIcon,
+  },
+  {
+    tool: "text",
+    label: msg("Text", { $context: "drawing tool that adds a text label" }),
+    key: "t",
+    Icon: TypeIcon,
+  },
 ];
 
 interface TextDraft {
@@ -103,7 +120,8 @@ function IconAction(props: {
 function canvasToPng(canvas: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob(
-      (blob) => (blob ? resolve(blob) : reject(new Error("The image could not be exported."))),
+      (blob) =>
+        blob ? resolve(blob) : reject(new Error(m(msg("The image could not be exported.")))),
       "image/png",
     );
   });
@@ -131,6 +149,8 @@ export default function AnnotationEditor(props: {
   const frameRef = useRef<number | null>(null);
   // Blur and the next click can both try to commit the same text; the ref lets only one win.
   const textRef = useRef<TextDraft | null>(null);
+  const gt = useGT();
+  const messages = useMessages();
   const composer = useComposerHandleContext();
   const annotations = currentAnnotations(history);
   const sizes = image ? annotationSizes(image.width, image.height) : null;
@@ -148,7 +168,9 @@ export default function AnnotationEditor(props: {
       },
       (cause: unknown) => {
         if (!cancelled)
-          setError(cause instanceof Error ? cause.message : "This file could not be opened.");
+          setError(
+            cause instanceof Error ? cause.message : m(msg("This file could not be opened.")),
+          );
       },
     );
     return () => {
@@ -291,7 +313,7 @@ export default function AnnotationEditor(props: {
 
   const exportFile = async () => {
     const canvas = canvasRef.current;
-    if (!canvas) throw new Error("The image is not ready yet.");
+    if (!canvas) throw new Error(gt("The image is not ready yet."));
     return new File([await canvasToPng(canvas)], annotatedFileName(props.name), {
       type: "image/png",
     });
@@ -313,13 +335,13 @@ export default function AnnotationEditor(props: {
         target.addDroppedFiles([file]);
         props.onClose();
       },
-      (cause: unknown) => reportFailure("Could not add the annotated image", cause),
+      (cause: unknown) => reportFailure(gt("Could not add the annotated image"), cause),
     );
   };
 
   const copy = () => {
     if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
-      reportFailure("Image copying is unavailable", undefined);
+      reportFailure(gt("Image copying is unavailable"), undefined);
       return;
     }
     const canvas = canvasRef.current;
@@ -331,7 +353,7 @@ export default function AnnotationEditor(props: {
         setCopied(true);
         copiedTimerRef.current = setTimeout(() => setCopied(false), 2000);
       },
-      (cause: unknown) => reportFailure("Could not copy the image", cause),
+      (cause: unknown) => reportFailure(gt("Could not copy the image"), cause),
     );
   };
 
@@ -345,7 +367,7 @@ export default function AnnotationEditor(props: {
         anchor.click();
         setTimeout(() => URL.revokeObjectURL(url), 30_000);
       },
-      (cause: unknown) => reportFailure("Could not save the image", cause),
+      (cause: unknown) => reportFailure(gt("Could not save the image"), cause),
     );
   };
 
@@ -354,7 +376,7 @@ export default function AnnotationEditor(props: {
       props.onClose();
       return;
     }
-    const confirmation = requestConfirmDialog("Discard your annotations?", {
+    const confirmation = requestConfirmDialog(gt("Discard your annotations?"), {
       variant: "destructive",
     });
     if (!confirmation) {
@@ -405,7 +427,7 @@ export default function AnnotationEditor(props: {
               </DialogTitle>
             </div>
             <ToggleGroup
-              aria-label="Annotation tool"
+              aria-label={gt("Annotation tool")}
               value={[tool]}
               onValueChange={(next) => {
                 const value = TOOLS.find((entry) => entry.tool === next[0]);
@@ -416,23 +438,23 @@ export default function AnnotationEditor(props: {
                 <Tooltip key={value}>
                   <TooltipTrigger
                     render={
-                      <Toggle value={value} aria-label={label} size="sm">
+                      <Toggle value={value} aria-label={messages(label)} size="sm">
                         <Icon className="size-4" />
                       </Toggle>
                     }
                   />
-                  <TooltipPopup>{`${label} (${key.toUpperCase()})`}</TooltipPopup>
+                  <TooltipPopup>{`${messages(label)} (${key.toUpperCase()})`}</TooltipPopup>
                 </Tooltip>
               ))}
             </ToggleGroup>
-            <div role="radiogroup" aria-label="Colour" className="flex items-center gap-1">
+            <div role="radiogroup" aria-label={gt("Colour")} className="flex items-center gap-1">
               {ANNOTATION_COLORS.map((entry) => (
                 <button
                   key={entry.value}
                   type="button"
                   role="radio"
                   aria-checked={color === entry.value}
-                  aria-label={entry.name}
+                  aria-label={messages(entry.name)}
                   onClick={() => setColor(entry.value)}
                   className={cn(
                     "size-5 rounded-full border border-border",
@@ -445,21 +467,21 @@ export default function AnnotationEditor(props: {
             </div>
             <div className="flex items-center">
               <IconAction
-                label="Undo"
+                label={gt("Undo")}
                 disabled={!canUndoAnnotation(history)}
                 onPress={() => setHistory(undoAnnotation)}
               >
                 <Undo2Icon className="size-4" />
               </IconAction>
               <IconAction
-                label="Redo"
+                label={gt("Redo")}
                 disabled={!canRedoAnnotation(history)}
                 onPress={() => setHistory(redoAnnotation)}
               >
                 <Redo2Icon className="size-4" />
               </IconAction>
               <IconAction
-                label="Clear all"
+                label={gt("Clear all")}
                 disabled={annotations.length === 0}
                 onPress={() => setHistory((current) => commitAnnotations(current, []))}
               >
@@ -467,23 +489,30 @@ export default function AnnotationEditor(props: {
               </IconAction>
             </div>
             <div className="ml-auto flex items-center gap-1">
-              <IconAction label={copied ? "Copied" : "Copy image"} disabled={!ready} onPress={copy}>
+              <IconAction
+                label={copied ? gt("Copied") : gt("Copy image")}
+                disabled={!ready}
+                onPress={copy}
+              >
                 {copied ? (
                   <CheckIcon className="size-4 text-primary" />
                 ) : (
                   <CopyIcon className="size-4" />
                 )}
               </IconAction>
-              <IconAction label="Save image" disabled={!ready} onPress={save}>
+              <IconAction label={gt("Save image")} disabled={!ready} onPress={save}>
                 <DownloadIcon className="size-4" />
               </IconAction>
               {composer ? (
                 <Button type="button" size="sm" disabled={!ready} onClick={attach}>
                   <PaperclipIcon className="size-4" />
-                  Add to chat
+                  <T>Add to chat</T>
                 </Button>
               ) : null}
-              <IconAction label="Close" onPress={requestClose}>
+              <IconAction
+                label={gt("Close", { $context: "verb, closes the annotator" })}
+                onPress={requestClose}
+              >
                 <XIcon className="size-4" />
               </IconAction>
             </div>
@@ -506,7 +535,7 @@ export default function AnnotationEditor(props: {
                 <canvas
                   ref={canvasRef}
                   role="img"
-                  aria-label={`Annotation canvas for ${props.name}`}
+                  aria-label={gt("Annotation canvas for {name}", { name: props.name })}
                   className={cn(
                     "block size-full touch-none",
                     tool === "text" ? "cursor-text" : "cursor-crosshair",
@@ -520,7 +549,7 @@ export default function AnnotationEditor(props: {
                 {textDraft && sizes ? (
                   <input
                     autoFocus
-                    aria-label="Annotation text"
+                    aria-label={gt("Annotation text")}
                     value={textDraft.value}
                     onChange={(event) => editText({ ...textDraft, value: event.target.value })}
                     onBlur={commitText}

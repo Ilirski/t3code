@@ -1,3 +1,5 @@
+import { msg } from "gt-react";
+
 export type AnnotationTool = "pen" | "highlighter" | "arrow" | "rect" | "text";
 
 export interface AnnotationPoint {
@@ -29,13 +31,13 @@ export type Annotation =
     };
 
 export const ANNOTATION_COLORS = [
-  { name: "Red", value: "#ef4444" },
-  { name: "Orange", value: "#f97316" },
-  { name: "Yellow", value: "#facc15" },
-  { name: "Green", value: "#22c55e" },
-  { name: "Blue", value: "#3b82f6" },
-  { name: "Black", value: "#111111" },
-  { name: "White", value: "#ffffff" },
+  { name: msg("Red", { $context: "colour" }), value: "#ef4444" },
+  { name: msg("Orange", { $context: "colour" }), value: "#f97316" },
+  { name: msg("Yellow", { $context: "colour" }), value: "#facc15" },
+  { name: msg("Green", { $context: "colour" }), value: "#22c55e" },
+  { name: msg("Blue", { $context: "colour" }), value: "#3b82f6" },
+  { name: msg("Black", { $context: "colour" }), value: "#111111" },
+  { name: msg("White", { $context: "colour" }), value: "#ffffff" },
 ] as const;
 
 /** Longest side of the working canvas; larger images are downscaled before editing. */

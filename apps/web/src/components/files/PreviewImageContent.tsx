@@ -78,7 +78,7 @@ export default function PreviewImageContent(props: {
             <MaximizeIcon className="size-3.5" />
           </FileSurfaceAction>
           <AnnotateAction
-            label="Annotate image"
+            label={gt("Annotate image")}
             name={props.name}
             disabled={!natural.width}
             load={() => loadImageForAnnotation(props.src)}
