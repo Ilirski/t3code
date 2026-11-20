@@ -1,11 +1,12 @@
-# Fork only: rebases `stable` onto each new upstream release. A clean rebase that passes the checks
-# is pushed straight to `stable`; a conflict or failing check goes to Claude Code, and its fix opens a
-# PR into `stable` instead. When Claude cannot fix it, the run opens an issue. Pushes to `stable`
-# start fork-desktop-windows.yml.
+# Fork only: merges each new upstream release into `stable`. A clean merge that passes the checks is
+# pushed to `stable`. A conflict or failing check goes to Claude Code; when its fix passes the same
+# checks it opens a PR into `stable`, otherwise the run opens an issue. Merging, never rebasing, keeps
+# `stable` moving forward only, so the PR's Merge button is always right. Pushes to `stable` start
+# fork-desktop-windows.yml.
 #
 # Secrets: CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`. FORK_SYNC_TOKEN, a fine-grained token
 # for this repository with Contents, Workflows, Pull requests and Issues set to read and write:
-# GITHUB_TOKEN cannot push the workflow files every upstream release changes.
+# GITHUB_TOKEN cannot push the workflow files upstream releases change.
 #
 #   gh workflow run fork-upstream-sync.yml              # newest upstream release
 #   gh workflow run fork-upstream-sync.yml -f tag=v0.1.12
@@ -17,7 +18,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Upstream release tag to rebase onto. Empty picks the newest release."
+        description: "Upstream release tag to merge. Empty picks the newest release."
         type: string
         default: ""
 
@@ -64,7 +65,6 @@ jobs:
           tag="${REQUESTED_TAG:-$(gh release view --repo "$UPSTREAM" --json tagName --jq .tagName)}"
           git fetch --no-tags "https://github.com/$UPSTREAM.git" "+refs/tags/$tag:refs/tags/$tag"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "stable=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           if git merge-base --is-ancestor "$tag" HEAD; then
             echo "stable already contains $tag."
             echo "action=none" >> "$GITHUB_OUTPUT"
@@ -76,25 +76,25 @@ jobs:
             echo "action=sync" >> "$GITHUB_OUTPUT"
           fi
 
-      # Before the rebase, which can leave conflict markers in the package.json this reads.
+      # Before the merge, which can leave conflict markers in the package.json this reads.
       - name: Setup Vite+
         if: steps.target.outputs.action == 'sync'
         uses: ./.github/actions/setup-ci-deps
         with:
           install: "false"
 
-      - name: Rebase onto the release
-        id: rebase
+      - name: Merge the release
+        id: merge
         if: steps.target.outputs.action == 'sync'
         env:
           TAG: ${{ steps.target.outputs.tag }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git rebase "$TAG" > "$RUNNER_TEMP/rebase.log" 2>&1; then
+          if git merge --no-edit -m "chore(fork): merge upstream $TAG" "$TAG" > "$RUNNER_TEMP/merge.log" 2>&1; then
             echo "conflict=false" >> "$GITHUB_OUTPUT"
           else
-            cat "$RUNNER_TEMP/rebase.log"
+            cat "$RUNNER_TEMP/merge.log"
             echo "conflict=true" >> "$GITHUB_OUTPUT"
           fi
 
@@ -106,31 +106,27 @@ jobs:
           curl -fsSL https://claude.ai/install.sh | bash
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
-      - name: Install dependencies and browsers
-        if: steps.target.outputs.action == 'sync' && steps.rebase.outputs.conflict == 'false'
-        run: |
-          vp install
-          vp run --filter @t3tools/desktop ensure:electron
-          node apps/web/node_modules/playwright/cli.js install --with-deps --only-shell chromium
-
-      - name: Check the rebase
+      - name: Check the merge
         id: check
-        if: steps.target.outputs.action == 'sync' && steps.rebase.outputs.conflict == 'false'
+        if: steps.target.outputs.action == 'sync' && steps.merge.outputs.conflict == 'false'
         env:
           TAG: ${{ steps.target.outputs.tag }}
         run: |
           set -o pipefail
-          if { vp run i18n:check && vp run check:changed "$TAG"; } 2>&1 | tee "$RUNNER_TEMP/check.log"; then
+          if {
+            vp install &&
+              vp run --filter @t3tools/desktop ensure:electron &&
+              node apps/web/node_modules/playwright/cli.js install --with-deps --only-shell chromium &&
+              vp run i18n:check && vp run check:changed "$TAG"
+          } 2>&1 | tee "$RUNNER_TEMP/check.log"; then
             echo "passed=true" >> "$GITHUB_OUTPUT"
           else
             echo "passed=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Push the clean rebase
+      - name: Push the clean merge
         if: steps.check.outputs.passed == 'true'
-        env:
-          OLD: ${{ steps.target.outputs.stable }}
-        run: git push --force-with-lease="stable:$OLD" origin HEAD:stable
+        run: git push origin HEAD:stable
 
       - name: Ask Claude to fix it
         id: claude
@@ -139,34 +135,33 @@ jobs:
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           TAG: ${{ steps.target.outputs.tag }}
-          CONFLICT: ${{ steps.rebase.outputs.conflict }}
+          CONFLICT: ${{ steps.merge.outputs.conflict }}
         run: |
           if test "$CONFLICT" = true; then
-            problem="The rebase stopped on a conflict:"$'\n'"$(cat "$RUNNER_TEMP/rebase.log")"
+            problem="The merge stopped on conflicts:"$'\n'"$(cat "$RUNNER_TEMP/merge.log")"
           else
-            problem="The rebase applied cleanly, but the checks failed. The end of their output:"$'\n'"$(tail -n 200 "$RUNNER_TEMP/check.log")"
+            problem="The merge applied cleanly, but the checks failed. The end of their output:"$'\n'"$(tail -n 200 "$RUNNER_TEMP/check.log")"
           fi
           cat > "$RUNNER_TEMP/prompt.md" <<EOF
-          This is Ilirski/t3code, a fork of $UPSTREAM. Its \`stable\` branch is an upstream release plus
-          the fork's own commits (the annotator, fork CI and fork build scripts). It is being rebased
-          onto upstream $TAG. These are the fork's commits:
+          This is Ilirski/t3code, a fork of $UPSTREAM. Its \`stable\` branch is upstream releases plus
+          the fork's own commits (the annotator, fork CI and fork build scripts). Upstream $TAG is being
+          merged into it. These are the fork's own commits:
 
-          $(git log --oneline "$TAG..ORIG_HEAD" 2>/dev/null || git log --oneline "$TAG..HEAD")
+          $(git log --oneline --no-merges "$TAG..HEAD")
 
           $problem
 
-          Make the rebase land with both upstream's changes and the fork's behaviour intact:
+          Make the merge land with both upstream's changes and the fork's behaviour intact:
 
-          1. If a rebase is in progress, resolve each conflict so both sides survive, \`git add\` the
-             files and run \`GIT_EDITOR=true git rebase --continue\`. Never abort the rebase, skip a
-             fork commit or drop upstream changes.
+          1. If the merge is in progress, resolve each conflict so both sides survive, \`git add\` the
+             files and finish with \`git commit --no-edit\`. Never abort the merge or drop either side.
           2. Run \`vp install\`, then make \`vp run i18n:check\` and \`vp run check:changed $TAG\` pass.
              Follow AGENTS.md; for example, new UI text goes through i18n and is translated in every
              locale. Browser tests need \`node apps/web/node_modules/playwright/cli.js install
              --with-deps --only-shell chromium\` first.
           3. Commit fixes as new conventional commits on top, such as \`fix(web): ...\`.
-          4. Change only what the update requires. Do not push, change remotes, or edit
-             .github/workflows/fork-*.yml.
+          4. Change only what the update requires. Do not push, change remotes, rewrite history, or
+             edit .github/workflows/fork-*.yml.
           5. End with a short plain summary of what you changed and why. It becomes the PR description.
              If you cannot make the checks pass, say exactly what blocks you.
           EOF
@@ -181,11 +176,10 @@ jobs:
         run: |
           set -o pipefail
           ok=true
-          git_dir="$(git rev-parse --git-dir)"
-          if test -d "$git_dir/rebase-merge" || test -d "$git_dir/rebase-apply"; then
-            echo "The rebase is still in progress." | tee "$RUNNER_TEMP/verify.log"; ok=false
-          elif ! git merge-base --is-ancestor "$TAG" HEAD; then
-            echo "HEAD does not contain $TAG." | tee "$RUNNER_TEMP/verify.log"; ok=false
+          if git rev-parse -q --verify MERGE_HEAD > /dev/null; then
+            echo "The merge is still in progress." | tee "$RUNNER_TEMP/verify.log"; ok=false
+          elif ! git merge-base --is-ancestor "$TAG" HEAD || ! git merge-base --is-ancestor origin/stable HEAD; then
+            echo "HEAD must contain both $TAG and origin/stable." | tee "$RUNNER_TEMP/verify.log"; ok=false
           elif test -n "$(git status --porcelain)"; then
             git status --short | tee "$RUNNER_TEMP/verify.log"; ok=false
           elif ! {
@@ -204,21 +198,13 @@ jobs:
         run: |
           git push --force origin "HEAD:refs/heads/sync/$TAG"
           {
-            echo "Rebases \`stable\` onto upstream [$TAG](https://github.com/$UPSTREAM/releases/tag/$TAG). The plain rebase needed changes, which Claude Code made; \`i18n:check\` and \`check:changed $TAG\` pass on this branch."
-            echo
-            echo "Do not use the merge button: this branch is a rebase, and merging it would duplicate the fork's commits. To accept it, point \`stable\` at it, which also closes this PR and starts the Windows build:"
-            echo
-            echo "\`\`\`sh"
-            echo "git fetch origin && git push --force-with-lease=stable:origin/stable origin origin/sync/$TAG:refs/heads/stable"
-            echo "\`\`\`"
-            echo
-            echo "## Claude's summary"
+            echo "Merges upstream [$TAG](https://github.com/$UPSTREAM/releases/tag/$TAG) into \`stable\`. It needed fixes, which Claude Code made below; the checks pass. Merge it when you are happy."
             echo
             cat "$RUNNER_TEMP/claude.md"
             echo
             echo "🤖 Generated with [Claude Code](https://claude.com/claude-code)"
           } > "$RUNNER_TEMP/pr.md"
-          gh pr create --base stable --head "sync/$TAG" --title "chore(fork): sync stable to upstream $TAG" --body-file "$RUNNER_TEMP/pr.md"
+          gh pr create --base stable --head "sync/$TAG" --title "chore(fork): update to upstream $TAG" --body-file "$RUNNER_TEMP/pr.md"
 
       - name: Open an issue when it could not be fixed
         if: always() && steps.target.outputs.action == 'sync' && steps.check.outputs.passed != 'true' && steps.verify.outputs.passed != 'true'
@@ -227,7 +213,7 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           {
-            echo "Rebasing \`stable\` onto upstream $TAG needs a human. [Workflow run]($RUN_URL)."
+            echo "Merging upstream $TAG into \`stable\` needs a human; \`stable\` is unchanged. [Workflow run]($RUN_URL)."
             echo
             echo "## Claude's summary"
             echo
@@ -236,7 +222,7 @@ jobs:
             echo "## Last check output"
             echo
             echo '```'
-            tail -n 80 "$RUNNER_TEMP/verify.log" 2>/dev/null || tail -n 80 "$RUNNER_TEMP/check.log" 2>/dev/null || cat "$RUNNER_TEMP/rebase.log"
+            tail -n 80 "$RUNNER_TEMP/verify.log" 2>/dev/null || tail -n 80 "$RUNNER_TEMP/check.log" 2>/dev/null || cat "$RUNNER_TEMP/merge.log"
             echo '```'
           } > "$RUNNER_TEMP/issue.md"
           gh issue create --title "Upstream sync to $TAG needs help" --body-file "$RUNNER_TEMP/issue.md"
