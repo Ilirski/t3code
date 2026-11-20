@@ -206,7 +206,11 @@ jobs:
           {
             echo "Rebases \`stable\` onto upstream [$TAG](https://github.com/$UPSTREAM/releases/tag/$TAG). The plain rebase needed changes, which Claude Code made; \`i18n:check\` and \`check:changed $TAG\` pass on this branch."
             echo
-            echo "Merging replaces \`stable\` with this branch's history. Use **Rebase and merge** or push it by hand: \`git push --force-with-lease origin sync/$TAG:stable\`."
+            echo "Do not use the merge button: this branch is a rebase, and merging it would duplicate the fork's commits. To accept it, point \`stable\` at it, which also closes this PR and starts the Windows build:"
+            echo
+            echo "\`\`\`sh"
+            echo "git fetch origin && git push --force-with-lease=stable:origin/stable origin origin/sync/$TAG:refs/heads/stable"
+            echo "\`\`\`"
             echo
             echo "## Claude's summary"
             echo
