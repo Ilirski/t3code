@@ -1,31 +1,70 @@
-# Fork only: builds an unsigned Windows x64 installer from this branch and keeps it as a run artifact.
+# Fork only: builds an unsigned Windows x64 installer on every push to `stable` (including the
+# upstream syncs from fork-upstream-sync.yml) and keeps it as a run artifact.
 # Like upstream's release-desktop.yml, it cross-builds on Linux: native Windows hosts install extra
 # optional natives and fail the packaged payload file limit. The installer embeds a Linux CLI archive
 # as its WSL runtime, as official installers do.
 #
-#   gh workflow run fork-desktop-windows.yml --ref stable -f version=0.1.10
+#   gh workflow run fork-desktop-windows.yml --ref stable
 #   gh run download <run-id> -n t3code-windows-x64
 name: Fork Windows installer
 
 on:
+  push:
+    branches: [stable]
   workflow_dispatch:
     inputs:
       version:
-        description: "Desktop version to stamp. Match the upstream stable tag this branch is based on."
+        description: "Desktop version to stamp. Empty uses the upstream release this branch is based on."
         type: string
-        default: "0.1.10"
+        default: ""
 
 permissions:
   contents: read
 
-env:
-  BUILD_VERSION: ${{ inputs.version }}
+concurrency:
+  group: fork-desktop-windows-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  version:
+    name: Resolve version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          filter: blob:none
+          sparse-checkout: .github
+
+      - name: Find the newest upstream release in this branch
+        id: version
+        env:
+          REQUESTED: ${{ inputs.version }}
+        run: |
+          version="$REQUESTED"
+          if test -z "$version"; then
+            # An annotated tag lists its tag object and its commit; only the commit is in this history.
+            version="$(git ls-remote --tags https://github.com/pingdotgg/t3code.git 'v*' |
+              sed -nE 's#^([0-9a-f]+)\trefs/tags/v([0-9]+\.[0-9]+\.[0-9]+)(\^\{\})?$#\2 \1#p' |
+              sort -rV -k1,1 |
+              while read -r candidate sha; do
+                if git merge-base --is-ancestor "$sha" HEAD 2>/dev/null; then echo "$candidate"; break; fi
+              done)"
+          fi
+          test -n "$version" || { echo "::error::No upstream release found in this branch."; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
   wsl_runtime:
     name: Build Linux x64 CLI archive
+    needs: [version]
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    env:
+      BUILD_VERSION: ${{ needs.version.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -77,16 +116,18 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: t3code-cli-linux-x64
-          path: release-cli/t3-${{ inputs.version }}-linux-x64.tar.gz
+          path: release-cli/t3-${{ needs.version.outputs.version }}-linux-x64.tar.gz
           compression-level: 0
           if-no-files-found: error
           retention-days: 3
 
   windows:
     name: Build Windows x64 installer
-    needs: [wsl_runtime]
+    needs: [version, wsl_runtime]
     runs-on: ubuntu-24.04
     timeout-minutes: 75
+    env:
+      BUILD_VERSION: ${{ needs.version.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
