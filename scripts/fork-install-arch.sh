@@ -9,7 +9,7 @@ set -euo pipefail
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo"
 [[ -x "$HOME/.local/share/vite-plus/bin/vp" ]] && PATH="$HOME/.local/share/vite-plus/bin:$PATH"
-command -v vp >/dev/null || { echo "vp (Vite+) is not installed: https://viteplus.dev" >&2; exit 1; }
+command -v vp >/dev/null || { echo "vp is not installed: curl -fsSL https://vite.plus | bash" >&2; exit 1; }
 command -v cargo >/dev/null || { echo "Rust is not installed: sudo pacman -S rustup && rustup default stable" >&2; exit 1; }
 
 sudo pacman -S --needed base-devel libsecret pkgconf imagemagick gtk3 nss alsa-lib mesa
@@ -18,7 +18,7 @@ sudo pacman -S --needed base-devel libsecret pkgconf imagemagick gtk3 nss alsa-l
 vp i
 vp run dist:desktop:linux
 
-version="$(node -p 'require("./apps/desktop/package.json").version')"
+version="$(sed -n 's/^  "version": "\(.*\)",$/\1/p' apps/desktop/package.json)"
 appimage="release/T3-Code-$version-x86_64.AppImage"
 [[ -f "$appimage" ]] || { echo "Build did not produce $appimage" >&2; exit 1; }
 # Every commit gets a higher pkgver so pacman always sees an upgrade.
