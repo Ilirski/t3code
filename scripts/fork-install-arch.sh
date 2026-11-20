@@ -16,7 +16,9 @@ sudo pacman -S --needed base-devel libsecret pkgconf imagemagick gtk3 nss alsa-l
 
 [[ "${1:-}" == "--no-pull" ]] || git pull --ff-only
 vp i
-vp run dist:desktop:linux
+# node-pty compiles against this machine's glibc, newer than the release ceiling; the package
+# only runs here, so the host's glibc is the right ceiling.
+T3CODE_GLIBC_BUILD_CEILING="$(ldd --version | sed -n '1s/.* //p')" vp run dist:desktop:linux
 
 version="$(sed -n 's/^  "version": "\(.*\)",$/\1/p' apps/desktop/package.json)"
 appimage="release/T3-Code-$version-x86_64.AppImage"
